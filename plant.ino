@@ -41,8 +41,7 @@
 
 // Pin Definitions
 const int WATER_LEVEL_PIN = 34;
-const int ULTRASONIC_TRIG_PIN = 5;
-const int ULTRASONIC_ECHO_PIN = 18;
+const int SOIL_MOISTURE_PIN = 35;
 const int SERVO_PIN = 13;
 const int LED_PIN = 2;
 
@@ -54,7 +53,7 @@ Servo wateringServo;
 
 // Thresholds
 const int LOW_WATER_THRESHOLD = 500;
-const int TRIGGER_DISTANCE_CM = 15;  // Trigger watering when object is closer than 15cm
+const int DRY_SOIL_THRESHOLD = 2500;  // Adjust after testing your sensor
 
 // Servo positions (adjust these to your setup)
 const int SERVO_UP_POSITION = 0;      // Cup upright (not watering)
@@ -67,9 +66,9 @@ const unsigned long WATERING_DURATION = 3000;    // 3 seconds pour time
 
 // State variables
 int waterLevelValue = 0;
-float distanceCm = 0;
+int soilMoistureValue = 0;
+bool isSoilDry = false;
 bool isWaterLow = false;
-bool shouldWater = false;
 bool isWatering = false;
 
 void setup() {
@@ -78,8 +77,7 @@ void setup() {
   
   // Pin setup
   pinMode(WATER_LEVEL_PIN, INPUT);
-  pinMode(ULTRASONIC_TRIG_PIN, OUTPUT);
-  pinMode(ULTRASONIC_ECHO_PIN, INPUT);
+  pinMode(SOIL_MOISTURE_PIN, INPUT);
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
   
@@ -94,13 +92,22 @@ void setup() {
   lcd.setCursor(0, 0);
   lcd.print("Plant Watering");
   lcd.setCursor(0, 1);
-  lcd.print("TEST MODE!");
+  //lcd.print("TEST MODE!");
   
-  Serial.println("\n=================================");
-  Serial.println("ESP32 Plant Watering - TEST MODE");
-  Serial.println("Using Ultrasonic Sensor");
-  Serial.println("=================================\n");
-  
+  // Calibration info
+Serial.println("CALIBRATION MODE:");
+Serial.println("Monitor soil moisture values for 30 seconds...\n");
+
+// Read soil for calibration
+for (int i = 0; i < 30; i++) {
+  int reading = analogRead(SOIL_MOISTURE_PIN);
+  Serial.print("Soil Reading: ");
+  Serial.println(reading);
+  delay(1000);
+}
+
+Serial.println("\nCalibration complete!");
+Serial.println("Adjust DRY_SOIL_THRESHOLD in code if needed.\n");
   delay(2000);
   lcd.clear();
 }
@@ -110,12 +117,10 @@ void loop() {
   waterLevelValue = analogRead(WATER_LEVEL_PIN);
   isWaterLow = (waterLevelValue < LOW_WATER_THRESHOLD);
   
-  // Read ultrasonic distance
-  distanceCm = getDistance();
-  
-  // Check if object is close enough to trigger watering
-  shouldWater = (distanceCm > 0 && distanceCm < TRIGGER_DISTANCE_CM);
-  
+ soilMoistureValue = analogRead(SOIL_MOISTURE_PIN);
+
+  // Check sensor states
+  isSoilDry = (soilMoistureValue > DRY_SOIL_THRESHOLD);
   // Update LED
   digitalWrite(LED_PIN, isWaterLow ? HIGH : LOW);
   
@@ -124,7 +129,7 @@ void loop() {
   
   if (!isWatering) {
     // Check if we should water
-    if (shouldWater && !isWaterLow) {
+    if (isSoilDry && !isWaterLow) {
       // Check cooldown period
       if (currentTime - lastWateringTime > WATERING_COOLDOWN) {
         startWatering();
@@ -156,6 +161,7 @@ void loop() {
       lcd.print("s       ");
     }
   }
+
   
   // Serial output
   printStatus();
@@ -163,25 +169,7 @@ void loop() {
   delay(500);  // Faster updates for testing
 }
 
-float getDistance() {
-  // Send ultrasonic pulse
-  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
-  delayMicroseconds(2);
-  digitalWrite(ULTRASONIC_TRIG_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
-  
-  // Read echo pulse
-  long duration = pulseIn(ULTRASONIC_ECHO_PIN, HIGH, 30000);  // 30ms timeout
-  
-  // Calculate distance in cm
-  if (duration == 0) {
-    return -1;  // No echo received
-  }
-  
-  float distance = duration * 0.034 / 2;  // Speed of sound = 340 m/s
-  return distance;
-}
+
 
 void startWatering() {
   isWatering = true;
@@ -212,40 +200,31 @@ void updateDisplay() {
     lcd.print("REFILL WATER!   ");
     lcd.setCursor(0, 1);
     lcd.print("Tank is low     ");
-  } else if (shouldWater) {
-    lcd.print("Object detected!");
-    lcd.setCursor(0, 1);
-    lcd.print("Dist: ");
-    lcd.print((int)distanceCm);
-    lcd.print("cm      ");
-  } else {
-    lcd.print("Ready to water  ");
-    lcd.setCursor(0, 1);
-    lcd.print("Dist: ");
-    if (distanceCm > 0) {
-      lcd.print((int)distanceCm);
-      lcd.print("cm      ");
-    } else {
-      lcd.print("---cm   ");
-    }
-  }
+  }  else if (isSoilDry) {
+  lcd.print("Soil is DRY!    ");
+  lcd.setCursor(0, 1);
+  lcd.print("Will water soon ");
+} else {
+  lcd.print("All systems OK  ");
+  lcd.setCursor(0, 1);
+  lcd.print("Soil: ");
+  lcd.print(soilMoistureValue);
+  lcd.print("    ");
 }
+  }
+
 
 void printStatus() {
   Serial.print("Water Level: ");
   Serial.print(waterLevelValue);
   Serial.print(" / 4095");
   
-  Serial.print("\t|\tDistance: ");
-  if (distanceCm > 0) {
-    Serial.print(distanceCm);
-    Serial.print(" cm");
-  } else {
-    Serial.print("Out of range");
-  }
+ Serial.print("\t|\tSoil Moisture: ");
+Serial.print(soilMoistureValue);
+Serial.print(" / 4095 ");
+Serial.print(isSoilDry ? "[DRY!]" : "[OK]");
   
-  Serial.print("\t|\tTrigger: ");
-  Serial.print(shouldWater ? "YES" : "NO");
+  
   
   Serial.print("\t|\tReservoir: ");
   Serial.println(isWaterLow ? "LOW" : "OK");
