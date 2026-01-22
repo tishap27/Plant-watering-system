@@ -59,6 +59,9 @@ const int DRY_SOIL_THRESHOLD = 2500;  // Adjust after testing your sensor
 const int SERVO_UP_POSITION = 0;      // Cup upright (not watering)
 const int SERVO_DOWN_POSITION = 90;   // Cup tipped (watering)
 
+// SERVO SPEED CONTROL 
+const int SERVO_SPEED_DELAY = 20;
+
 // Timing variables
 unsigned long lastWateringTime = 0;
 const unsigned long WATERING_COOLDOWN = 10000;  // 10 seconds for testing (change to 3600000 for 1 hour)
@@ -178,14 +181,25 @@ void startWatering() {
   Serial.println("\n>>> WATERING PLANT <<<");
   
   // Tip the cup down to pour water
-  wateringServo.write(SERVO_DOWN_POSITION);
+  //wateringServo.write(SERVO_DOWN_POSITION);
+  // Slowly tilt cup from 0 to 90
+  for (int angle = SERVO_UP_POSITION; angle <= SERVO_DOWN_POSITION; angle++) {
+    wateringServo.write(angle);
+    delay(SERVO_SPEED_DELAY);  
+  }
 }
 
 void stopWatering() {
   isWatering = false;
   
   // Return cup to upright position
-  wateringServo.write(SERVO_UP_POSITION);
+  //wateringServo.write(SERVO_UP_POSITION);
+   // Slowly return cup from 90 to 0
+  for (int angle = SERVO_DOWN_POSITION; angle >= SERVO_UP_POSITION; angle--) {
+    wateringServo.write(angle);
+    delay(SERVO_SPEED_DELAY);  // Wait 20ms between each degree
+  }
+  
   
   Serial.println(">>> WATERING COMPLETE <<<");
   Serial.println(">>> SERVO RETURNED TO UP POSITION <<<\n");
