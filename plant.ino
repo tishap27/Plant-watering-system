@@ -58,7 +58,7 @@ const int DRY_SOIL_THRESHOLD = 2500;  // Adjust after testing your sensor
 
 // Servo positions (adjust these to your setup)
 const int SERVO_UP_POSITION = 0;      // Cup upright (not watering)
-const int SERVO_DOWN_POSITION = 90;   // Cup tipped (watering)
+const int SERVO_DOWN_POSITION = 55;   // Cup tipped (watering)
 
 // SERVO SPEED CONTROL 
 const int SERVO_SPEED_DELAY = 20;
@@ -121,29 +121,29 @@ Serial.println("Adjust DRY_SOIL_THRESHOLD in code if needed.\n");
 }
 
 void loop() {
-  // Read water level sensor
+   // Read sensors
   waterLevelValue = analogRead(WATER_LEVEL_PIN);
-  isWaterLow = (waterLevelValue < LOW_WATER_THRESHOLD);
+  soilMoistureValue = analogRead(SOIL_MOISTURE_PIN);
   
- soilMoistureValue = analogRead(SOIL_MOISTURE_PIN);
-
-  // Check sensor states
+  // Update sensor states
+  isWaterLow = (waterLevelValue < LOW_WATER_THRESHOLD);
   isSoilDry = (soilMoistureValue > DRY_SOIL_THRESHOLD);
+  
   // Update LED
   digitalWrite(LED_PIN, isWaterLow ? HIGH : LOW);
-
+  
+  // Check override button
   checkOverrideButton();
   
-  // Automatic watering logic
-  if (!isOverrideMode) {
+  // Main watering logic
   unsigned long currentTime = millis();
   
   if (!isWatering) {
-    // Check if we should water
+    // Not currently watering - check if we should start
     if (isSoilDry && !isWaterLow) {
-      // Check cooldown period
+      // Automatic mode: check cooldown
       if (currentTime - lastWateringTime > WATERING_COOLDOWN) {
-        startWatering(true);
+        startWatering(false);  // false = automatic mode
       } else {
         // Still in cooldown
         lcd.setCursor(0, 0);
@@ -155,16 +155,17 @@ void loop() {
         lcd.print("s     ");
       }
     } else {
-      // Update display
+      // Normal display
       updateDisplay();
     }
   } else {
-    // Currently watering
+    // Currently watering - check if time to stop
     if (currentTime - lastWateringTime > WATERING_DURATION) {
       stopWatering();
     } else {
+      // Show watering progress
       lcd.setCursor(0, 0);
-      lcd.print("WATERING...     ");
+      lcd.print(isOverrideMode ? "MANUAL WATER   " : "AUTO WATERING  ");
       lcd.setCursor(0, 1);
       unsigned long timeLeft = (WATERING_DURATION - (currentTime - lastWateringTime)) / 1000;
       lcd.print("Time: ");
@@ -172,15 +173,12 @@ void loop() {
       lcd.print("s       ");
     }
   }
-}
-
   
   // Serial output
   printStatus();
   
-  delay(500);  // Faster updates for testing
+  delay(500);
 }
-
 void checkOverrideButton() {
   // Read button (LOW = pressed because of pull-up resistor)
   bool buttonPressed = (digitalRead(OVERRIDE_BUTTON) == LOW);
@@ -233,7 +231,7 @@ void overrideWaterTrigger() {
 
 void startWatering(bool overrideTrigger) {
   isWatering = true;
-  isOverrideMode = overrideWaterTrigger;
+  isOverrideMode = overrideTrigger;
   lastWateringTime = millis();
   
   Serial.println("\n>>> WATERING PLANT <<<");
@@ -272,6 +270,7 @@ void updateDisplay() {
     lcd.print("REFILL WATER!   ");
     lcd.setCursor(0, 1);
     lcd.print("Tank is low     ");
+    
   }  else if (isSoilDry) {
   lcd.print("Soil is DRY!    ");
   lcd.setCursor(0, 1);
