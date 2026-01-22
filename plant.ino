@@ -3,37 +3,37 @@
  * 
  * Connections:
  * Water Level Sensor:
- *   VCC → ESP32 3V3
- *   GND → ESP32 GND
- *   Signal → ESP32 GPIO 34
+ *   VCC -> ESP32 3V3
+ *   GND -> ESP32 GND
+ *   Signal -> ESP32 GPIO 34
  * 
  * Ultrasonic Sensor (HC-SR04):
- *   VCC → ESP32 5V
- *   GND → ESP32 GND
- *   Trig → ESP32 GPIO 5
- *   Echo → ESP32 GPIO 18
+ *   VCC -> ESP32 5V
+ *   GND -> ESP32 GND
+ *   Trig -> ESP32 GPIO 5
+ *   Echo -> ESP32 GPIO 18
  * 
  * Servo Motor:
- *   VCC → External 5V power supply
- *   GND → ESP32 GND + External power supply GND (common ground)
- *   Signal → ESP32 GPIO 13
+ *   VCC -> External 5V power supply
+ *   GND -> ESP32 GND + External power supply GND (common ground)
+ *   Signal -> ESP32 GPIO 13
  * 
  * LCD1602 Module (Parallel):
- *   VSS → ESP32 GND
- *   VDD → ESP32 5V (or 3V3)
- *   V0 → 10K potentiometer (for contrast adjustment)
- *   RS → ESP32 GPIO 19
- *   RW → ESP32 GND
- *   E → ESP32 GPIO 23
- *   D4 → ESP32 GPIO 25
- *   D5 → ESP32 GPIO 27
- *   D6 → ESP32 GPIO 26
- *   D7 → ESP32 GPIO 15
- *   A (backlight +) → ESP32 5V
- *   K (backlight -) → ESP32 GND
+ *   VSS -> ESP32 GND
+ *   VDD -> ESP32 5V (or 3V3)
+ *   V0 -> 10K potentiometer (for contrast adjustment)
+ *   RS -> ESP32 GPIO 19
+ *   RW -> ESP32 GND
+ *   E -> ESP32 GPIO 23
+ *   D4 -> ESP32 GPIO 25
+ *   D5 -> ESP32 GPIO 27
+ *   D6 -> ESP32 GPIO 26
+ *   D7 -> ESP32 GPIO 15
+ *   A (backlight +) -> ESP32 5V
+ *   K (backlight -) -> ESP32 GND
  * 
  * LED:
- *   GPIO 2 → 220Ω resistor → LED (+) → GND
+ *   GPIO 2 -> 220Ω resistor -> LED (+) -> GND
  */
 
 #include <LiquidCrystal.h>
@@ -44,6 +44,7 @@ const int WATER_LEVEL_PIN = 34;
 const int SOIL_MOISTURE_PIN = 35;
 const int SERVO_PIN = 13;
 const int LED_PIN = 2;
+const int OVERRIDE_BUTTON= 32;
 
 // LCD pins: RS, E, D4, D5, D6, D7
 LiquidCrystal lcd(19, 23, 25, 27, 26, 15);
@@ -73,7 +74,10 @@ int soilMoistureValue = 0;
 bool isSoilDry = false;
 bool isWaterLow = false;
 bool isWatering = false;
+bool isOverrideMode = false; 
 
+unsigned long lastButtonPress = 0 ; 
+const unsigned long  BUTTON_DEBOUNCE = 500 ; 
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -82,6 +86,7 @@ void setup() {
   pinMode(WATER_LEVEL_PIN, INPUT);
   pinMode(SOIL_MOISTURE_PIN, INPUT);
   pinMode(LED_PIN, OUTPUT);
+  pinMode(OVERRIDE_BUTTON, INPUT_PULLUP);
   digitalWrite(LED_PIN, LOW);
   
   // Servo setup
@@ -126,8 +131,11 @@ void loop() {
   isSoilDry = (soilMoistureValue > DRY_SOIL_THRESHOLD);
   // Update LED
   digitalWrite(LED_PIN, isWaterLow ? HIGH : LOW);
+
+  checkOverrideButton();
   
   // Automatic watering logic
+  if (!isOverrideMode) {
   unsigned long currentTime = millis();
   
   if (!isWatering) {
@@ -135,7 +143,7 @@ void loop() {
     if (isSoilDry && !isWaterLow) {
       // Check cooldown period
       if (currentTime - lastWateringTime > WATERING_COOLDOWN) {
-        startWatering();
+        startWatering(true);
       } else {
         // Still in cooldown
         lcd.setCursor(0, 0);
@@ -164,6 +172,7 @@ void loop() {
       lcd.print("s       ");
     }
   }
+}
 
   
   // Serial output
@@ -172,10 +181,59 @@ void loop() {
   delay(500);  // Faster updates for testing
 }
 
+void checkOverrideButton() {
+  // Read button (LOW = pressed because of pull-up resistor)
+  bool buttonPressed = (digitalRead(OVERRIDE_BUTTON) == LOW);
+  
+  if (buttonPressed) {
+    unsigned long currentTime = millis();
+    
+    // Debounce: only trigger if enough time has passed since last press
+    if (currentTime - lastButtonPress > BUTTON_DEBOUNCE) {
+      lastButtonPress = currentTime;
+      
+      // Don't trigger if already watering
+      if (!isWatering) {
+        overrideWaterTrigger();
+      } else {
+        Serial.println(">>> Button pressed but already watering! <<<");
+      }
+    }
+  }
+}
 
 
-void startWatering() {
+void overrideWaterTrigger() {
+  
+  Serial.println("  OVERRIDE BUTTON PRESSED!        ");
+  
+  
+  // Check if water is available
+  if (isWaterLow) {
+    Serial.println(">>> ERROR: Cannot water - reservoir is LOW! <<<");
+    Serial.println(">>> Please refill water cup first! <<<\n");
+    
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("override: BLOCKED");
+    lcd.setCursor(0, 1);
+    lcd.print("Water cup empty!");
+    delay(2000);
+    return;
+  }
+  
+  // Water is available - proceed with override watering!
+  Serial.println(">>> override OVERRIDE ACTIVATED <<<");
+  Serial.println(">>> Bypassing soil sensor and cooldown timer <<<");
+  Serial.println(">>> Watering NOW! <<<\n");
+  
+  isOverrideMode = true;
+  startWatering(true);  // true = override mode
+}
+
+void startWatering(bool overrideTrigger) {
   isWatering = true;
+  isOverrideMode = overrideWaterTrigger;
   lastWateringTime = millis();
   
   Serial.println("\n>>> WATERING PLANT <<<");
