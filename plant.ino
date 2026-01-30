@@ -1,5 +1,5 @@
 /*
- * ESP32 Plant Watering System with Servo and Ultrasonic Sensor (Test Mode)
+ * ESP32 Plant Watering System with Servo 
  * 
  * Connections:
  * Water Level Sensor:
@@ -18,6 +18,8 @@
  *   GND -> ESP32 GND + External power supply GND (common ground)
  *   Signal -> ESP32 GPIO 13
  * 
+ * Soil moisture
+ * pin 35
  * LCD1602 Module (Parallel):
  *   VSS -> ESP32 GND
  *   VDD -> ESP32 5V (or 3V3)
@@ -54,18 +56,18 @@ Servo wateringServo;
 
 // Thresholds
 const int LOW_WATER_THRESHOLD = 500;
-const int DRY_SOIL_THRESHOLD = 2500;  // Adjust after testing your sensor
+const int DRY_SOIL_THRESHOLD = 2500;  // Adjust 
 
 // Servo positions (adjust these to your setup)
 const int SERVO_UP_POSITION = 0;      // Cup upright (not watering)
-const int SERVO_DOWN_POSITION = 55;   // Cup tipped (watering)
+const int SERVO_DOWN_POSITION = 75;   // Cup tipped (watering)
 
 // SERVO SPEED CONTROL 
 const int SERVO_SPEED_DELAY = 20;
 
 // Timing variables
 unsigned long lastWateringTime = 0;
-const unsigned long WATERING_COOLDOWN = 10000;  // 10 seconds for testing (change to 3600000 for 1 hour)
+const unsigned long WATERING_COOLDOWN = 10000;  // 10 seconds for testing 
 const unsigned long WATERING_DURATION = 3000;    // 3 seconds pour time
 
 // State variables
@@ -102,8 +104,8 @@ void setup() {
   lcd.setCursor(0, 1);
   //lcd.print("TEST MODE!");
   
-  // Calibration info
-Serial.println("CALIBRATION MODE:");
+  // Calibration info ONLY FOR TESTING
+/*Serial.println("CALIBRATION MODE:");
 Serial.println("Monitor soil moisture values for 30 seconds...\n");
 
 // Read soil for calibration
@@ -115,7 +117,7 @@ for (int i = 0; i < 30; i++) {
 }
 
 Serial.println("\nCalibration complete!");
-Serial.println("Adjust DRY_SOIL_THRESHOLD in code if needed.\n");
+Serial.println("Adjust DRY_SOIL_THRESHOLD in code if needed.\n");*/
   delay(2000);
   lcd.clear();
 }
@@ -150,7 +152,7 @@ void loop() {
         lcd.print("Cooldown active ");
         lcd.setCursor(0, 1);
         unsigned long timeLeft = (WATERING_COOLDOWN - (currentTime - lastWateringTime)) / 1000;
-        lcd.print("Wait: ");
+        lcd.print("Attendez...: ");
         lcd.print(timeLeft);
         lcd.print("s     ");
       }
