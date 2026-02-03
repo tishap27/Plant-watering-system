@@ -18,8 +18,10 @@
  *   GND -> ESP32 GND + External power supply GND (common ground)
  *   Signal -> ESP32 GPIO 13
  * 
- * Soil moisture
+ * Soil moisture 1
  * pin 35
+ * Soil moisture 1
+ * pin 33
  * LCD1602 Module (Parallel):
  *   VSS -> ESP32 GND
  *   VDD -> ESP32 5V (or 3V3)
@@ -36,6 +38,9 @@
  * 
  * LED:
  *   GPIO 2 -> 220Ω resistor -> LED (+) -> GND
+ * BUzzer 
+ * GPIO pin 04
+ * other leg -> GND
  */
 
 #include <LiquidCrystal.h>
@@ -44,6 +49,9 @@
 // Pin Definitions
 const int WATER_LEVEL_PIN = 34;
 const int SOIL_MOISTURE_PIN = 35;
+const int SOIL_MOISTURE_PIN_2 = 33;  
+const int BUZZER_PIN = 4; 
+
 const int SERVO_PIN = 13;
 const int LED_PIN = 2;
 const int OVERRIDE_BUTTON= 32;
@@ -70,10 +78,23 @@ unsigned long lastWateringTime = 0;
 const unsigned long WATERING_COOLDOWN = 10000;  // 10 seconds for testing 
 const unsigned long WATERING_DURATION = 3000;    // 3 seconds pour time
 
+
+unsigned long lastBuzzerBeep = 0;
+const unsigned long BUZZER_BEEP_INTERVAL = 2000;  // Beep every 2 seconds
+const int BUZZER_BEEP_DURATION = 200;  // 200ms beep
+bool buzzerState = false;
+
+unsigned long lastDisplaySwitch = 0;
+const unsigned long DISPLAY_SWITCH_INTERVAL = 3000;
+bool showingSensor1 = true;
 // State variables
 int waterLevelValue = 0;
 int soilMoistureValue = 0;
+int soilMoistureValue2 = 0;  // Second sensor
+
 bool isSoilDry = false;
+bool isSoilDry2 = false;
+bool isAnySoilDry = false; 
 bool isWaterLow = false;
 bool isWatering = false;
 bool isOverrideMode = false; 
@@ -87,6 +108,12 @@ void setup() {
   // Pin setup
   pinMode(WATER_LEVEL_PIN, INPUT);
   pinMode(SOIL_MOISTURE_PIN, INPUT);
+
+  pinMode(SOIL_MOISTURE_PIN_2, INPUT);  
+  pinMode(BUZZER_PIN, OUTPUT);          
+
+  digitalWrite(BUZZER_PIN, LOW);  
+
   pinMode(LED_PIN, OUTPUT);
   pinMode(OVERRIDE_BUTTON, INPUT_PULLUP);
   digitalWrite(LED_PIN, LOW);
@@ -126,13 +153,17 @@ void loop() {
    // Read sensors
   waterLevelValue = analogRead(WATER_LEVEL_PIN);
   soilMoistureValue = analogRead(SOIL_MOISTURE_PIN);
+  soilMoistureValue2 = analogRead(SOIL_MOISTURE_PIN_2);
   
   // Update sensor states
   isWaterLow = (waterLevelValue < LOW_WATER_THRESHOLD);
   isSoilDry = (soilMoistureValue > DRY_SOIL_THRESHOLD);
+  isSoilDry2 = (soilMoistureValue2 > DRY_SOIL_THRESHOLD);
+  isAnySoilDry = (isSoilDry || isSoilDry2);
   
   // Update LED
   digitalWrite(LED_PIN, isWaterLow ? HIGH : LOW);
+  handleBuzzer(); 
   
   // Check override button
   checkOverrideButton();
@@ -142,7 +173,7 @@ void loop() {
   
   if (!isWatering) {
     // Not currently watering - check if we should start
-    if (isSoilDry && !isWaterLow) {
+    if (isAnySoilDry && !isWaterLow) {
       // Automatic mode: check cooldown
       if (currentTime - lastWateringTime > WATERING_COOLDOWN) {
         startWatering(false);  // false = automatic mode
@@ -181,6 +212,60 @@ void loop() {
   
   delay(500);
 }
+
+//BUZZer
+void handleBuzzer() {
+  static unsigned long lastChange = 0;
+  static uint8_t state = 0;   // 0–5 states in the pattern
+  const unsigned long shortBeep = 80;   // ms buzzer ON
+  const unsigned long shortGap  = 80;   // ms between beeps
+  const unsigned long longPause = 1000; // ms after 3rd beep
+
+  if (!isWaterLow) {
+    digitalWrite(BUZZER_PIN, LOW);
+    state = 0;
+    lastChange = millis();
+    return;
+  }
+
+  unsigned long now = millis();
+
+  switch (state) {
+    case 0: // Beep 1 ON
+      digitalWrite(BUZZER_PIN, HIGH);
+      if (now - lastChange >= shortBeep) { lastChange = now; state = 1; }
+      break;
+
+    case 1: // Gap 1
+      digitalWrite(BUZZER_PIN, LOW);
+      if (now - lastChange >= shortGap) { lastChange = now; state = 2; }
+      break;
+
+    case 2: // Beep 2 ON
+      digitalWrite(BUZZER_PIN, HIGH);
+      if (now - lastChange >= shortBeep) { lastChange = now; state = 3; }
+      break;
+
+    case 3: // Gap 2
+      digitalWrite(BUZZER_PIN, LOW);
+      if (now - lastChange >= shortGap) { lastChange = now; state = 4; }
+      break;
+
+    case 4: // Beep 3 ON
+      digitalWrite(BUZZER_PIN, HIGH);
+      if (now - lastChange >= shortBeep) { lastChange = now; state = 5; }
+      break;
+
+    case 5: // Long pause
+      digitalWrite(BUZZER_PIN, LOW);
+      if (now - lastChange >= longPause) { lastChange = now; state = 0; }
+      break;
+  }
+}
+
+
+
+
 void checkOverrideButton() {
   // Read button (LOW = pressed because of pull-up resistor)
   bool buttonPressed = (digitalRead(OVERRIDE_BUTTON) == LOW);
@@ -266,6 +351,13 @@ void stopWatering() {
 }
 
 void updateDisplay() {
+  unsigned long currentTime = millis();
+  
+  // Switch which sensor to display every 3 seconds
+  if (currentTime - lastDisplaySwitch >= DISPLAY_SWITCH_INTERVAL) {
+    showingSensor1 = !showingSensor1;
+    lastDisplaySwitch = currentTime;
+  }
   lcd.setCursor(0, 0);
   
   if (isWaterLow) {
@@ -273,18 +365,33 @@ void updateDisplay() {
     lcd.setCursor(0, 1);
     lcd.print("Tank is low     ");
     
-  }  else if (isSoilDry) {
-  lcd.print("Soil is DRY!    ");
-  lcd.setCursor(0, 1);
-  lcd.print("Will water soon ");
-} else {
-  lcd.print("All systems OK  ");
-  lcd.setCursor(0, 1);
-  lcd.print("Soil: ");
-  lcd.print(soilMoistureValue);
-  lcd.print("    ");
-}
+  }  else if (isAnySoilDry) {
+    lcd.print("Soil DRY!       ");
+    lcd.setCursor(0, 1);
+    if (isSoilDry && isSoilDry2) {
+      lcd.print("BOTH sensors dry");
+    } else if (isSoilDry) {
+      lcd.print("Sensor 1 dry    ");
+    } else {
+      lcd.print("Sensor 2 dry    ");
+    }
+    } else {
+    // Both sensors OK
+    if (showingSensor1) {
+      lcd.print("Sensor 1: OK    ");
+      lcd.setCursor(0, 1);
+      lcd.print("Value: ");
+      lcd.print(soilMoistureValue);
+      lcd.print("    ");
+    } else {
+      lcd.print("Sensor 2: OK    ");
+      lcd.setCursor(0, 1);
+      lcd.print("Value: ");
+      lcd.print(soilMoistureValue2);
+      lcd.print("    ");
+    }
   }
+}
 
 
 void printStatus() {
@@ -293,12 +400,17 @@ void printStatus() {
   Serial.print(" / 4095");
   
  Serial.print("\t|\tSoil Moisture: ");
-Serial.print(soilMoistureValue);
-Serial.print(" / 4095 ");
-Serial.print(isSoilDry ? "[DRY!]" : "[OK]");
+ Serial.print(soilMoistureValue);
+ Serial.print(" / 4095 ");
+ Serial.print(isSoilDry ? "[DRY!]" : "[OK]");
   
-  
+  Serial.print("\t|\tSoil 2: ");
+  Serial.print(soilMoistureValue2);
+  Serial.print(isSoilDry2 ? " [DRY!]" : " [OK]");
   
   Serial.print("\t|\tReservoir: ");
   Serial.println(isWaterLow ? "LOW" : "OK");
+
+  Serial.print("\t|\tBuzzer: ");
+  Serial.println(buzzerState ? "BEEPING" : "Silent");
 }
