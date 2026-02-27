@@ -1,3 +1,19 @@
+
+/*
+LCD BOARD          PIN#    ->    ESP32
+─────────────────────────────────────
+3V3OUT  (pin 36)   ->   3.3V   (power)
+GND     (pin 38)   ->   GND
+(Pin 11 from top) GP8  LCD_DC        ->   GPIO 2
+(Pin 12 from top)GP9  LCD_CS        ->   GPIO 5
+(Pin 14 from top)GP10 LCD_CLK       ->   GPIO 18
+(Pin 15 from top)GP11 LCD_DIN       ->   GPIO 23
+(Pin 16 from top)GP12 LCD_RST       ->   GPIO 4
+(Pin 17 from top)GP13 LCD_BL        ->   GPIO 15
+
+TOP: marked - towards the usb side opposite to pin 40
+*/
+
 #include <TFT_eSPI.h>
 #include "plant_image.h"   
 
