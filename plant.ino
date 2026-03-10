@@ -44,7 +44,7 @@
  */
 
 #include <LiquidCrystal.h>
-#include <ESP32Servo.h>
+
 
 // Pin Definitions
 const int WATER_LEVEL_PIN = 34;
@@ -52,26 +52,21 @@ const int SOIL_MOISTURE_PIN = 35;
 const int SOIL_MOISTURE_PIN_2 = 33;  
 const int BUZZER_PIN = 4; 
 
-const int SERVO_PIN = 13;
 const int LED_PIN = 2;
 const int OVERRIDE_BUTTON= 32;
+
+const int PUMP_RELAY_PIN      = 13;
 
 // LCD pins: RS, E, D4, D5, D6, D7
 LiquidCrystal lcd(19, 23, 25, 27, 26, 15);
 
-// Servo
-Servo wateringServo;
+
 
 // Thresholds
 const int LOW_WATER_THRESHOLD = 500;
 const int DRY_SOIL_THRESHOLD = 2500;  // Adjust 
 
-// Servo positions (adjust these to your setup)
-const int SERVO_UP_POSITION = 0;      // Cup upright (not watering)
-const int SERVO_DOWN_POSITION = 75;   // Cup tipped (watering)
 
-// SERVO SPEED CONTROL 
-const int SERVO_SPEED_DELAY = 20;
 
 // Timing variables
 unsigned long lastWateringTime = 0;
@@ -118,9 +113,8 @@ void setup() {
   pinMode(OVERRIDE_BUTTON, INPUT_PULLUP);
   digitalWrite(LED_PIN, LOW);
   
-  // Servo setup
-  wateringServo.attach(SERVO_PIN);
-  wateringServo.write(SERVO_UP_POSITION);  // Start with cup upright
+  pinMode(PUMP_RELAY_PIN, OUTPUT);
+digitalWrite(PUMP_RELAY_PIN, LOW);
   
   // LCD setup
   lcd.begin(16, 2);
@@ -326,10 +320,7 @@ void startWatering(bool overrideTrigger) {
   // Tip the cup down to pour water
   //wateringServo.write(SERVO_DOWN_POSITION);
   // Slowly tilt cup from 0 to 90
-  for (int angle = SERVO_UP_POSITION; angle <= SERVO_DOWN_POSITION; angle++) {
-    wateringServo.write(angle);
-    delay(SERVO_SPEED_DELAY);  
-  }
+  digitalWrite(PUMP_RELAY_PIN, HIGH);
 }
 
 void stopWatering() {
@@ -338,14 +329,11 @@ void stopWatering() {
   // Return cup to upright position
   //wateringServo.write(SERVO_UP_POSITION);
    // Slowly return cup from 90 to 0
-  for (int angle = SERVO_DOWN_POSITION; angle >= SERVO_UP_POSITION; angle--) {
-    wateringServo.write(angle);
-    delay(SERVO_SPEED_DELAY);  // Wait 20ms between each degree
-  }
+  digitalWrite(PUMP_RELAY_PIN, LOW);
   
   
   Serial.println(">>> WATERING COMPLETE <<<");
-  Serial.println(">>> SERVO RETURNED TO UP POSITION <<<\n");
+  Serial.println(">>> Pump Stopped <<<\n");
   
   lcd.clear();
 }
