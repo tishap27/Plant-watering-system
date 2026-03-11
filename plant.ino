@@ -58,7 +58,7 @@ const int OVERRIDE_BUTTON= 32;
 const int PUMP_RELAY_PIN      = 13;
 
 // LCD pins: RS, E, D4, D5, D6, D7
-LiquidCrystal lcd(19, 23, 25, 27, 26, 15);
+LiquidCrystal lcd(19, 23, 25, 27, 26, 14);
 
 
 
