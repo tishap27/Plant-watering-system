@@ -49,7 +49,7 @@
 
 // ── Pin Definitions ──────────────────
 const int WATER_LEVEL_PIN  = 34;
-const int SOIL_MOISTURE_PIN = 35;
+const int SOIL_MOISTURE_PIN = 33;
 const int PUMP_RELAY_PIN   = 5;
 const int LED_PIN          = 2;
 const int BUZZER_PIN       = 4;
