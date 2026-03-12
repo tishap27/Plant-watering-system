@@ -13,12 +13,12 @@
  *   GND    -> ESP32 GND
  *   Signal -> ESP32 GPIO 35
  *
- * Pump Relay Module:
- *   VCC    -> ESP32 5V
- *   GND    -> ESP32 GND
- *   IN     -> ESP32 GPIO 13
+ *  Tranistor  Module:
+ *   E    -> GND     [left most facing flat]
+ *   B    -> 10k resistor-> pin 5  
+ *   last one     -> pump +ve (black wire)
  *
- * LCD1602 (Parallel):
+ * LCD1602:
  *   VSS    -> ESP32 GND
  *   VDD    -> ESP32 5V
  *   V0     -> 10K potentiometer (contrast)
@@ -38,51 +38,42 @@
  * Buzzer:
  *   GPIO 4  -> Buzzer (+)
  *   GND     -> Buzzer (-)
- *
- * Override Button:
- *   GPIO 32 -> one leg
- *   GND     -> other leg  (uses internal pull-up)
- * ─────────────────────────────────────
  */
 
 #include <LiquidCrystal.h>
 
-// ── Pin Definitions ──────────────────
+//  Pin Definitions 
 const int WATER_LEVEL_PIN  = 34;
 const int SOIL_MOISTURE_PIN = 33;
 const int PUMP_RELAY_PIN   = 5;
 const int LED_PIN          = 2;
 const int BUZZER_PIN       = 4;
-const int OVERRIDE_BUTTON  = 32;
 
-// ── LCD: RS, E, D4, D5, D6, D7 ──────
+//  LCD: RS, E, D4, D5, D6, D7 
 LiquidCrystal lcd(19, 23, 25, 27, 26, 14);
 
-// ── Thresholds ───────────────────────
+//  Thresholds 
 const int LOW_WATER_THRESHOLD = 500;   // below this = water low
 const int DRY_SOIL_THRESHOLD  = 2500;  // above this = soil dry
 
-// ── Timing ───────────────────────────
+//  Timing
 const unsigned long WATERING_COOLDOWN = 10000;  // 10s between auto-waterings
-const unsigned long WATERING_DURATION = 3000;   // pump runs for 3s
-const unsigned long BUTTON_DEBOUNCE   = 500;
+const unsigned long WATERING_DURATION = 3000;   // pump runs for 3seconds
 
-// ── State Variables ───────────────────
+//  Variables 
 int  waterLevelValue   = 0;
 int  soilMoistureValue = 0;
 bool isWaterLow  = false;
 bool isSoilDry   = false;
 bool isWatering  = false;
-bool isOverride  = false;
 
 unsigned long lastWateringTime = 0;
-unsigned long lastButtonPress  = 0;
 
-// ── Buzzer pattern state ──────────────
+//  Buzzer pattern state 
 static unsigned long buzzerLastChange = 0;
 static uint8_t       buzzerState      = 0;
 
-// ─────────────────────────────────────
+// 
 void setup() {
   Serial.begin(115200);
 
@@ -91,7 +82,6 @@ void setup() {
   pinMode(PUMP_RELAY_PIN,    OUTPUT);
   pinMode(LED_PIN,           OUTPUT);
   pinMode(BUZZER_PIN,        OUTPUT);
-  pinMode(OVERRIDE_BUTTON,   INPUT_PULLUP);
 
   digitalWrite(PUMP_RELAY_PIN, LOW);
   digitalWrite(LED_PIN,        LOW);
@@ -107,7 +97,7 @@ void setup() {
   lcd.clear();
 }
 
-// ─────────────────────────────────────
+// 
 void loop() {
   // 1. Read sensors
   waterLevelValue   = analogRead(WATER_LEVEL_PIN);
@@ -122,17 +112,14 @@ void loop() {
   // 3. Buzzer triple-beep when water is low
   handleBuzzer();
 
-  // 4. Check manual override button
-  checkButton();
-
-  // 5. Watering logic
+  // 4. Watering logic
   unsigned long now = millis();
 
   if (isWatering) {
     // ── Show watering progress ──
     unsigned long timeLeft = (WATERING_DURATION - (now - lastWateringTime)) / 1000;
     lcd.setCursor(0, 0);
-    lcd.print(isOverride ? "MANUAL WATER    " : "AUTO  WATERING  ");
+    lcd.print("AUTO  WATERING  ");
     lcd.setCursor(0, 1);
     lcd.print("Time left: ");
     lcd.print(timeLeft);
@@ -144,10 +131,10 @@ void loop() {
     }
 
   } else {
-    // ── Auto-start if soil is dry and water is available ──
+    //  Auto-start if soil is dry and water is available 
     if (isSoilDry && !isWaterLow) {
       if (now - lastWateringTime >= WATERING_COOLDOWN) {
-        startWatering(false);
+        startWatering();
       } else {
         unsigned long timeLeft = (WATERING_COOLDOWN - (now - lastWateringTime)) / 1000;
         lcd.setCursor(0, 0);
@@ -166,10 +153,9 @@ void loop() {
   delay(300);
 }
 
-// ─────────────────────────────────────
-void startWatering(bool override) {
+// 
+void startWatering() {
   isWatering       = true;
-  isOverride       = override;
   lastWateringTime = millis();
   digitalWrite(PUMP_RELAY_PIN, HIGH);
   Serial.println(">>> PUMP ON <<<");
@@ -182,35 +168,9 @@ void stopWatering() {
   lcd.clear();
 }
 
-// ─────────────────────────────────────
-void checkButton() {
-  if (digitalRead(OVERRIDE_BUTTON) == LOW) {
-    unsigned long now = millis();
-    if (now - lastButtonPress > BUTTON_DEBOUNCE) {
-      lastButtonPress = now;
 
-      if (isWatering) {
-        Serial.println("Button pressed - already watering!");
-        return;
-      }
-      if (isWaterLow) {
-        Serial.println("Button pressed - water too low!");
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("BLOCKED!        ");
-        lcd.setCursor(0, 1);
-        lcd.print("Refill water!   ");
-        delay(2000);
-        lcd.clear();
-        return;
-      }
-      Serial.println(">>> MANUAL OVERRIDE <<<");
-      startWatering(true);
-    }
-  }
-}
 
-// ─────────────────────────────────────
+// buzzer
 void handleBuzzer() {
   const unsigned long shortBeep  = 80;
   const unsigned long shortGap   = 80;
@@ -240,7 +200,7 @@ void handleBuzzer() {
   }
 }
 
-// ─────────────────────────────────────
+// 
 void updateDisplay() {
   lcd.setCursor(0, 0);
   if (isWaterLow) {
@@ -262,7 +222,7 @@ void updateDisplay() {
   }
 }
 
-// ─────────────────────────────────────
+// 
 void printStatus() {
   Serial.print("Water Level: "); Serial.print(waterLevelValue);
   Serial.print(" | Soil: ");     Serial.print(soilMoistureValue);
